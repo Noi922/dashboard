@@ -1,0 +1,20 @@
+{
+  "name": "truenas-dashboard",
+  "version": "1.0.0",
+  "description": "Eigenes Dashboard für TrueNAS",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "demo": "node demo/run-demo.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "imapflow": "^2.11.0",
+    "node-ical": "^0.27.6",
+    "rss-parser": "^3.13.0",
+    "ws": "^8.18.0"
+  }
+}

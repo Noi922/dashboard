@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TrueNAS-Dashboard</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f3f2ee;
+    --surface: #fcfcfb;
+    --border: #e2e0d9;
+    --grid: #e9e7e1;
+    --text: #0b0b0b;
+    --text-2: #52514e;
+    --text-3: #7d7b75;
+    --series-1: #2a78d6;
+    --series-2: #eb6834;
+    --series-3: #1baf7a;
+    --series-4: #eda100;
+    --glow: rgba(42,120,214,.10);
+    --shadow: 0 1px 2px rgba(20,20,15,.05), 0 6px 20px rgba(20,20,15,.05);
+    --track: #e9e7e1;
+    --good: #0ca30c;
+    --warning: #fab219;
+    --serious: #ec835a;
+    --critical: #d03b3b;
+    --neutral: #8a8882;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --page: #111110;
+      --surface: #1a1a19;
+      --border: #2e2e2b;
+      --grid: #2a2a27;
+      --text: #f0efec;
+      --text-2: #c3c2b7;
+      --text-3: #8f8e86;
+      --series-1: #3987e5;
+      --series-2: #d95926;
+      --series-3: #199e70;
+      --series-4: #c98500;
+      --glow: rgba(57,135,229,.13);
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+      --track: #2e2e2b;
+      --neutral: #77766f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; color: var(--text); min-height: 100vh;
+    background: radial-gradient(1100px 520px at 12% -160px, var(--glow), transparent 70%), var(--page);
+    background-repeat: no-repeat;
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 1320px; margin: 0 auto; padding: 20px 16px 40px; }
+  header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px 32px; margin: 12px 4px 24px; }
+  .greet { color: var(--text-2); font-size: 15px; }
+  .clock { font-size: 56px; font-weight: 650; letter-spacing: -0.03em; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .today { font-size: 17px; color: var(--text-2); margin-top: 2px; }
+  .weather { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+  .wnow { display: flex; align-items: center; gap: 12px; }
+  .wnow .ico { font-size: 40px; line-height: 1; }
+  .wnow b { font-size: 30px; font-weight: 650; letter-spacing: -0.02em; display: block; line-height: 1.1; }
+  .wdays { display: flex; gap: 16px; }
+  .wday { text-align: center; font-size: 12.5px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+  .wday .ico { font-size: 20px; display: block; margin: 2px 0; }
+  .sect { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 26px 4px 12px; }
+  h1 { font-size: 20px; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
+  .meta { color: var(--text-2); flex: 1 1 300px; }
+  h2 { font-size: 13px; font-weight: 600; margin: 0 0 12px; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 8px; }
+  h2 svg { width: 16px; height: 16px; stroke: var(--series-1); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  h2 .count { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--text-3); }
+  .item { display: flex; gap: 12px; padding: 9px 0; border-top: 1px solid var(--border); min-width: 0; }
+  .item.first { border-top: 0; padding-top: 2px; }
+  .item .body { min-width: 0; flex: 1; }
+  .item .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item .when { flex: none; color: var(--text-3); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  .day { font-size: 12px; font-weight: 600; color: var(--text-3); margin: 12px 0 2px; }
+  .day:first-child { margin-top: 0; }
+  .ev .bar { flex: none; width: 4px; border-radius: 2px; background: var(--c); }
+  .ev .time { flex: none; width: 104px; white-space: nowrap; color: var(--text-2); font-variant-numeric: tabular-nums; }
+  .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; background: var(--series-1); }
+  .dot.read { background: transparent; }
+  a { color: inherit; text-decoration: none; } a:hover { text-decoration: underline; }
+  .news .t { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .grid { display: grid; gap: 14px; margin-bottom: 14px; }
+  .g3 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .g2 { grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); }
+  @media (max-width: 420px) { .g2, .g3 { grid-template-columns: 1fr; } }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px; min-width: 0; box-shadow: var(--shadow); }
+  .hero { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .hero b { font-size: 30px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .hero span { color: var(--text-2); }
+  .legend { display: flex; gap: 14px; color: var(--text-2); font-size: 12px; margin-top: 2px; }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  .chart { position: relative; margin-top: 10px; height: 120px; }
+  .chart svg { display: block; width: 100%; height: 100%; overflow: visible; }
+  .chart text { fill: var(--text-3); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+  .tip {
+    position: absolute; top: 0; pointer-events: none; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 8px; font-size: 12px; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.15);
+    font-variant-numeric: tabular-nums; z-index: 2;
+  }
+  .tip i { color: var(--text-3); font-style: normal; display: block; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .chip::before {
+    content: attr(data-icon); display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%;
+    background: var(--c); color: #fff; font-size: 10px; font-weight: 700; line-height: 1;
+  }
+  .chip.good { --c: var(--good); } .chip.warning { --c: var(--warning); } .chip.warning::before { color: #1a1a19; }
+  .chip.serious { --c: var(--serious); } .chip.critical { --c: var(--critical); } .chip.neutral { --c: var(--neutral); }
+  .pool + .pool { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .name { font-weight: 600; font-size: 15px; }
+  .meter { height: 10px; background: var(--track); border-radius: 5px; margin: 8px 0 6px; overflow: hidden; }
+  .meter div { height: 100%; background: var(--series-1); border-radius: 5px 4px 4px 5px; }
+  .sub { color: var(--text-2); font-size: 12.5px; }
+  .hint { color: var(--text-3); font-size: 12.5px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-weight: 500; color: var(--text-3); font-size: 12px; padding: 0 8px 6px 0; }
+  td { padding: 7px 8px 7px 0; border-top: 1px solid var(--border); vertical-align: middle; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; padding-right: 0; }
+  .scroll { overflow-x: auto; }
+  .scroll td, .scroll th { white-space: nowrap; }
+  .alert { display: flex; gap: 10px; padding: 9px 0; border-top: 1px solid var(--border); }
+  .alert:first-of-type { border-top: 0; padding-top: 0; }
+  .alert .chip { flex: 0 0 84px; align-self: flex-start; }
+  button {
+    font: inherit; font-size: 12px; padding: 3px 10px; border-radius: 6px; border: 1px solid var(--border);
+    background: transparent; color: var(--text); cursor: pointer;
+  }
+  button:hover { background: var(--track); } button:disabled { opacity: .5; cursor: default; }
+  .empty { color: var(--text-3); padding: 6px 0; }
+  .banner { background: var(--surface); border: 1px solid var(--critical); border-radius: 10px; padding: 12px 16px; margin-bottom: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <div class="greet" id="greet"></div>
+      <div class="clock" id="clock"></div>
+      <div class="today" id="today"></div>
+    </div>
+    <div class="weather" id="weather"></div>
+  </header>
+
+  <div class="grid g3" id="personal"></div>
+
+  <div class="sect">
+    <h1 id="host">TrueNAS</h1>
+    <div class="meta" id="meta">Verbinde …</div>
+    <div id="conn"></div>
+  </div>
+  <div id="banner"></div>
+
+  <div class="grid g3">
+    <section class="card"><h2><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9.5" y="9.5" width="5" height="5"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg>CPU</h2><div class="hero" id="cpuHero"></div><div class="chart" id="cpuChart"></div></section>
+    <section class="card"><h2><svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="2"/><path d="M7 11v2M11 11v2M15 11v2M6 17v3M18 17v3"/></svg>Arbeitsspeicher</h2><div class="hero" id="memHero"></div><div class="chart" id="memChart"></div></section>
+    <section class="card"><h2><svg viewBox="0 0 24 24"><path d="M7 4v16M7 20l-3.5-3.5M7 20l3.5-3.5M17 20V4M17 4l-3.5 3.5M17 4l3.5 3.5"/></svg>Netzwerk</h2><div class="hero" id="netHero"></div>
+      <div class="legend"><span><i class="sw" style="background:var(--series-1)"></i>Empfangen</span><span><i class="sw" style="background:var(--series-2)"></i>Gesendet</span></div>
+      <div class="chart" id="netChart" style="height:102px"></div></section>
+  </div>
+
+  <div class="grid g2">
+    <section class="card"><h2><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>Pools</h2><div id="pools"></div></section>
+    <section class="card"><h2><svg viewBox="0 0 24 24"><path d="M12 4 2.5 20h19L12 4zM12 10v4M12 17v.5"/></svg>Warnungen</h2><div id="alerts"></div></section>
+  </div>
+
+  <div class="grid g2">
+    <section class="card"><h2><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 14h18M7 17h.5M11 17h.5"/></svg>Festplatten</h2><div class="scroll" id="disks"></div></section>
+    <section class="card"><h2><svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>Apps</h2><div class="scroll" id="apps"></div>
+      <h2 style="margin-top:20px"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>Virtuelle Maschinen</h2><div class="scroll" id="vms"></div></section>
+  </div>
+
+  <div class="grid">
+    <section class="card"><h2><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Aufgaben</h2><div class="scroll" id="tasks"></div></section>
+  </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const nf = (n, d = 0) => n.toLocaleString('de-DE', { minimumFractionDigits: d, maximumFractionDigits: d });
+
+function bytes(n, unit = '') {
+  if (n == null) return '–';
+  const u = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
+  let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return nf(n, n >= 100 || i === 0 ? 0 : 1) + ' ' + u[i] + unit;
+}
+function diskSize(n) { // Herstellerangabe: dezimal
+  if (n == null) return '–';
+  return n >= 1e12 ? nf(n / 1e12, n % 1e12 ? 1 : 0) + ' TB' : nf(n / 1e9, 0) + ' GB';
+}
+function ago(ms) {
+  if (!ms) return '–';
+  const s = Math.max(0, (Date.now() - ms) / 1000);
+  if (s < 90) return 'gerade eben';
+  if (s < 3600) return `vor ${Math.round(s / 60)} Min.`;
+  if (s < 86400) return `vor ${Math.round(s / 3600)} Std.`;
+  if (s < 172800) return 'gestern';
+  return `vor ${Math.round(s / 86400)} Tagen`;
+}
+function uptime(s) {
+  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
+  return d ? `${d} T ${h} Std.` : h ? `${h} Std. ${m} Min.` : `${m} Min.`;
+}
+const chip = (kind, icon, label) => `<span class="chip ${kind}" data-icon="${icon}">${esc(label)}</span>`;
+const unavailable = (v) => v && v.unavailable ? `<div class="empty">Nicht verfügbar (${esc(v.unavailable)})</div>` : null;
+
+// ------------------------------------------------------------ Diagramme
+const WINDOW = 5 * 60 * 1000;
+const hover = {};
+
+function chart(el, t, series, { max, fmt }) {
+  const W = el.clientWidth, H = el.clientHeight;
+  if (!W) return;
+  const m = { l: 44, r: 6, t: 6, b: 16 };
+  const now = t.length ? t[t.length - 1] : Date.now();
+  const x = (ts) => m.l + (1 - (now - ts) / WINDOW) * (W - m.l - m.r);
+  const y = (v) => m.t + (1 - v / max) * (H - m.t - m.b);
+  let svg = '';
+  for (const g of [0, 0.5, 1]) {
+    const yy = y(max * g);
+    svg += `<line x1="${m.l}" x2="${W - m.r}" y1="${yy}" y2="${yy}" stroke="var(--grid)" stroke-width="1"/>` +
+      `<text x="${m.l - 6}" y="${yy + 3.5}" text-anchor="end">${fmt(max * g)}</text>`;
+  }
+  svg += `<text x="${m.l}" y="${H - 2}">−5 Min.</text><text x="${W - m.r}" y="${H - 2}" text-anchor="end">jetzt</text>`;
+  for (const s of series) {
+    let dPath = '', seg = [], segs = [];
+    s.values.forEach((v, i) => {
+      if (v == null || now - t[i] > WINDOW) { if (seg.length) segs.push(seg); seg = []; return; }
+      seg.push([x(t[i]), y(Math.min(v, max))]);
+    });
+    if (seg.length) segs.push(seg);
+    for (const sg of segs) {
+      const line = sg.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join('');
+      if (series.length === 1) svg += `<path d="${line}L${sg[sg.length - 1][0].toFixed(1)} ${y(0)}L${sg[0][0].toFixed(1)} ${y(0)}Z" fill="${s.color}" opacity=".12"/>`;
+      dPath += line;
+    }
+    svg += `<path d="${dPath}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  }
+  // Hover: Fadenkreuz + Tooltip am nächstgelegenen Messpunkt
+  let tip = '';
+  const hx = hover[el.id];
+  if (hx != null && t.length) {
+    let best = -1, bd = Infinity;
+    t.forEach((ts, i) => { const dd = Math.abs(x(ts) - hx); if (dd < bd && now - ts <= WINDOW) { bd = dd; best = i; } });
+    if (best >= 0) {
+      const px = x(t[best]);
+      svg += `<line x1="${px}" x2="${px}" y1="${m.t}" y2="${H - m.b}" stroke="var(--text-3)" stroke-width="1"/>`;
+      let rows = '';
+      for (const s of series) {
+        const v = s.values[best];
+        if (v == null) continue;
+        svg += `<circle cx="${px}" cy="${y(Math.min(v, max))}" r="4" fill="${s.color}" stroke="var(--surface)" stroke-width="2"/>`;
+        rows += `<div>${series.length > 1 ? `<i class="sw" style="display:inline-block;background:${s.color}"></i>${esc(s.name)}: ` : ''}<b>${s.tip ? s.tip(v) : fmt(v)}</b></div>`;
+      }
+      const side = px > W / 2 ? `right:${W - px + 10}px` : `left:${px + 10}px`;
+      tip = `<div class="tip" style="${side}"><i>${new Date(t[best]).toLocaleTimeString('de-DE')}</i>${rows}</div>`;
+    }
+  }
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(el.dataset.label || '')}">${svg}</svg>${tip}`;
+}
+
+function niceMax(v) {
+  const min = 1024 * 1024; // mindestens 1 MiB/s
+  let m = min;
+  for (const step of [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000]) { m = step * min; if (m >= v) break; }
+  return m;
+}
+
+// ------------------------------------------------------------ Darstellung
+let last = null;
+
+function renderLive(s) {
+  const h = s.history, l = s.live;
+  if (!l) {
+    const msg = s.mode === 'rest' ? 'Live-Werte gibt es nur mit der WebSocket-API (ab 25.04).' : 'Warte auf Live-Daten …';
+    for (const id of ['cpuHero', 'memHero', 'netHero']) $(id).innerHTML = `<span>${msg}</span>`;
+    return;
+  }
+  $('cpuHero').innerHTML = `<b>${l.cpu != null ? nf(l.cpu, 0) + ' %' : '–'}</b>` +
+    (l.temp != null ? `<span>${nf(l.temp, 0)} °C</span>` : '') + (s.system?.cores ? `<span>${s.system.cores} Threads</span>` : '');
+  $('memHero').innerHTML = `<b>${l.memUsed != null ? nf((l.memUsed / l.memTotal) * 100, 0) + ' %' : '–'}</b>` +
+    `<span>${bytes(l.memUsed)} von ${bytes(l.memTotal)}</span>` + (l.arc != null ? `<span>ZFS-Cache ${bytes(l.arc)}</span>` : '');
+  $('netHero').innerHTML = `<b>↓ ${bytes(l.rx, '/s')}</b><span>↑ ${bytes(l.tx, '/s')}</span>`;
+  const pct = (v) => nf(v, 0) + ' %';
+  const c1 = 'var(--series-1)', c2 = 'var(--series-2)';
+  chart($('cpuChart'), h.t, [{ name: 'CPU', color: c1, values: h.cpu }], { max: 100, fmt: pct });
+  chart($('memChart'), h.t, [{ name: 'RAM', color: c1, values: h.mem }], { max: 100, fmt: pct });
+  const nmax = niceMax(Math.max(0, ...h.rx, ...h.tx));
+  const rate = (v) => bytes(v, '/s');
+  chart($('netChart'), h.t, [{ name: 'Empfangen', color: c1, values: h.rx, tip: rate }, { name: 'Gesendet', color: c2, values: h.tx, tip: rate }],
+    { max: nmax, fmt: (v) => (v ? bytes(v) : '0') });
+}
+
+function poolChip(p) {
+  if (p.status === 'ONLINE' && p.healthy) return chip('good', '✓', 'Online');
+  if (p.status === 'ONLINE') return chip('warning', '!', 'Online, Fehler');
+  if (p.status === 'DEGRADED') return chip('serious', '!', 'Beeinträchtigt');
+  return chip('critical', '✕', p.status === 'FAULTED' ? 'Ausgefallen' : p.status);
+}
+function scanText(sc) {
+  if (!sc || !sc.function) return 'Noch kein Scrub';
+  const what = sc.function === 'RESILVER' ? 'Resilver' : 'Scrub';
+  if (sc.state === 'SCANNING') return `${what} läuft: ${nf(sc.percentage || 0, 0)} %`;
+  const err = sc.errors ? `, ${sc.errors} Fehler` : ', keine Fehler';
+  return `Letzter ${what} ${ago(sc.end)}${err}`;
+}
+function renderPools(pools) {
+  const u = unavailable(pools);
+  if (u) return u;
+  if (!pools) return '<div class="empty">Lade …</div>';
+  if (!pools.length) return '<div class="empty">Keine Pools vorhanden</div>';
+  return pools.map((p) => {
+    const pct = p.size ? (p.allocated / p.size) * 100 : 0;
+    const warn = pct >= 90 ? chip('critical', '✕', 'Fast voll') : pct >= 80 ? chip('warning', '!', 'Über 80 % belegt') : '';
+    return `<div class="pool"><div class="row"><span class="name">${esc(p.name)}</span>${poolChip(p)}</div>
+      <div class="meter" title="${nf(pct, 1)} % belegt"><div style="width:${Math.min(100, pct).toFixed(1)}%"></div></div>
+      <div class="row sub"><span><b>${nf(pct, 0)} %</b> belegt · ${bytes(p.allocated)} von ${bytes(p.size)} · ${bytes(p.free)} frei</span>${warn}</div>
+      <div class="hint">${esc(scanText(p.scan))}</div></div>`;
+  }).join('');
+}
+
+const LEVEL = {
+  CRITICAL: ['critical', '✕', 'Kritisch'], ALERT: ['critical', '✕', 'Kritisch'], EMERGENCY: ['critical', '✕', 'Kritisch'],
+  ERROR: ['serious', '!', 'Fehler'], WARNING: ['warning', '!', 'Warnung'], NOTICE: ['neutral', 'i', 'Hinweis'], INFO: ['neutral', 'i', 'Info'],
+};
+function renderAlerts(alerts) {
+  const u = unavailable(alerts);
+  if (u) return u;
+  if (!alerts) return '<div class="empty">Lade …</div>';
+  if (!alerts.length) return `<div class="empty">${chip('good', '✓', 'Keine aktiven Warnungen')}</div>`;
+  const rank = (a) => ['critical', 'serious', 'warning', 'neutral'].indexOf((LEVEL[a.level] || LEVEL.INFO)[0]);
+  return [...alerts].sort((a, b) => rank(a) - rank(b)).map((a) => {
+    const l = LEVEL[a.level] || LEVEL.INFO;
+    return `<div class="alert">${chip(...l)}<div><div>${esc(a.text)}</div><div class="hint">${ago(a.time)}</div></div></div>`;
+  }).join('');
+}
+
+function tempCell(t) {
+  if (t == null) return '–';
+  const txt = nf(t, 0) + ' °C';
+  return t >= 55 ? chip('critical', '✕', txt) : t >= 45 ? chip('warning', '!', txt) : txt;
+}
+function renderDisks(disks) {
+  const u = unavailable(disks);
+  if (u) return u;
+  if (!disks) return '<div class="empty">Lade …</div>';
+  return `<table><tr><th>Name</th><th>Modell</th><th>Pool</th><th class="num">Größe</th><th class="num">Temperatur</th></tr>` +
+    disks.map((d) => `<tr><td><b>${esc(d.name)}</b></td><td>${esc(d.model || '–')} <span class="hint">${esc(d.type || '')}</span></td>
+      <td>${esc(d.pool || '–')}</td><td class="num">${diskSize(d.size)}</td><td class="num">${tempCell(d.temp)}</td></tr>`).join('') + '</table>';
+}
+
+const RUN = {
+  RUNNING: ['good', '▶', 'Läuft'], ACTIVE: ['good', '▶', 'Läuft'], STOPPED: ['neutral', '■', 'Gestoppt'],
+  DEPLOYING: ['warning', '…', 'Startet'], STOPPING: ['warning', '…', 'Stoppt'], CRASHED: ['critical', '✕', 'Abgestürzt'],
+  ERROR: ['critical', '✕', 'Fehler'], SUSPENDED: ['neutral', '■', 'Pausiert'],
+};
+function actionBtn(s, kind, item) {
+  if (!s.actionsEnabled || s.mode !== 'ws') return '';
+  const running = ['RUNNING', 'ACTIVE', 'DEPLOYING'].includes(item.state);
+  return `<td class="num"><button data-kind="${kind}" data-id="${esc(item.id)}" data-action="${running ? 'stop' : 'start'}">${running ? 'Stoppen' : 'Starten'}</button></td>`;
+}
+function renderWorkloads(s, list, kind, empty) {
+  const u = unavailable(list);
+  if (u) return u;
+  if (!list) return '<div class="empty">Lade …</div>';
+  if (!list.length) return `<div class="empty">${empty}</div>`;
+  return '<table>' + list.map((a) => {
+    const st = RUN[a.state] || ['neutral', '?', a.state];
+    const info = kind === 'app'
+      ? esc(a.version || '') + (a.update ? ' · Update verfügbar' : '')
+      : [a.vcpus && `${a.vcpus} vCPU`, a.memory && `${nf(a.memory / 1024, 0)} GiB RAM`].filter(Boolean).join(' · ');
+    return `<tr><td><b>${esc(a.name)}</b></td><td class="hint">${info}</td><td>${chip(...st)}</td>${actionBtn(s, kind, a)}</tr>`;
+  }).join('') + '</table>';
+}
+
+const TASK = {
+  FINISHED: ['good', '✓', 'Erfolgreich'], SUCCESS: ['good', '✓', 'Erfolgreich'], RUNNING: ['warning', '…', 'Läuft'],
+  PENDING: ['neutral', '○', 'Ausstehend'], WAITING: ['neutral', '○', 'Wartet'], ERROR: ['critical', '✕', 'Fehlgeschlagen'],
+  FAILED: ['critical', '✕', 'Fehlgeschlagen'], ABORTED: ['serious', '!', 'Abgebrochen'], HOLD: ['neutral', '○', 'Angehalten'],
+};
+function renderTasks(tasks) {
+  const u = unavailable(tasks);
+  if (u) return u;
+  if (!tasks) return '<div class="empty">Lade …</div>';
+  if (!tasks.length) return '<div class="empty">Keine Aufgaben eingerichtet</div>';
+  return `<table><tr><th>Art</th><th>Name</th><th>Letzter Lauf</th><th>Ergebnis</th></tr>` + tasks.map((t) => {
+    const st = !t.enabled ? ['neutral', '■', 'Deaktiviert'] : TASK[t.state] || ['neutral', '○', t.state || 'Noch nie gelaufen'];
+    return `<tr><td>${esc(t.type)}</td><td><b>${esc(t.name)}</b></td><td>${ago(t.time)}</td><td>${chip(...st)}</td></tr>`;
+  }).join('') + '</table>';
+}
+
+// ------------------------------------------------------------ Persönliche Bereiche
+const ICON = {
+  cal: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
+  mail: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>',
+  news: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h6M7 12h10M7 16h10"/></svg>',
+};
+const WX = [[0, '☀️', 'Klar'], [1, '🌤️', 'Überwiegend klar'], [2, '⛅', 'Teils bewölkt'], [3, '☁️', 'Bedeckt'], [48, '🌫️', 'Nebel'],
+  [57, '🌦️', 'Nieselregen'], [67, '🌧️', 'Regen'], [77, '🌨️', 'Schnee'], [82, '🌦️', 'Regenschauer'], [86, '🌨️', 'Schneeschauer'], [99, '⛈️', 'Gewitter']];
+const wx = (code) => WX.find((w) => code <= w[0]) || WX[3];
+const hm = (ms) => new Date(ms).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+const dayKey = (ms) => new Date(ms).toDateString();
+function dayLabel(ms) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const diff = Math.round((new Date(ms).setHours(0, 0, 0, 0) - today) / 86400e3);
+  const full = new Date(ms).toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
+  return diff <= 0 ? 'Heute' : diff === 1 ? 'Morgen · ' + full : full;
+}
+const failed = (w) => (w.error && !w.updated ? `<div class="empty">Nicht abrufbar (${esc(w.error)})</div>` : null);
+
+function tickClock() {
+  const d = new Date(), h = d.getHours();
+  $('greet').textContent = h < 5 ? 'Gute Nacht' : h < 11 ? 'Guten Morgen' : h < 18 ? 'Guten Tag' : 'Guten Abend';
+  $('clock').textContent = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  $('today').textContent = d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function renderWeather(w) {
+  if (!w || w.temp == null) return '';
+  const [, ico, text] = wx(w.code);
+  const days = w.days.slice(1).map((d) => {
+    const name = new Date(d.day + 'T12:00').toLocaleDateString('de-DE', { weekday: 'short' });
+    return `<div class="wday" title="${esc(wx(d.code)[2])}">${esc(name)}<span class="ico">${wx(d.code)[1]}</span>${nf(d.max, 0)}° <span class="hint">${nf(d.min, 0)}°</span></div>`;
+  }).join('');
+  const t = w.days[0];
+  return `<div class="wnow"><span class="ico">${ico}</span><div><b>${nf(w.temp, 0)} °C</b>
+    <span class="sub">${esc(text)}${w.name ? ' · ' + esc(w.name) : ''}${t ? ` · ${nf(t.min, 0)}° bis ${nf(t.max, 0)}°` : ''}</span></div></div><div class="wdays">${days}</div>`;
+}
+
+function renderCalendar(c) {
+  let body = failed(c);
+  if (!body) {
+    if (!c.events) body = '<div class="empty">Lade …</div>';
+    else if (!c.events.length) body = '<div class="empty">Keine Termine in den nächsten 14 Tagen</div>';
+    else {
+      body = ''; let prev = null;
+      const today0 = new Date().setHours(0, 0, 0, 0);
+      for (const e of c.events) {
+        const start = Math.max(e.start, today0), k = dayKey(start);
+        if (k !== prev) { body += `<div class="day">${esc(dayLabel(start))}</div>`; prev = k; }
+        const time = e.allDay ? 'Ganztägig' : `${hm(e.start)} – ${hm(e.end)}`;
+        const sub = [c.calendars.length > 1 && e.calendar, e.location].filter(Boolean).join(' · ');
+        body += `<div class="item ev first" style="--c:var(--series-${(e.cal % 4) + 1})"><span class="bar"></span><span class="time">${time}</span>
+          <div class="body"><div class="t"><b>${esc(e.title)}</b></div>${sub ? `<div class="hint t">${esc(sub)}</div>` : ''}</div></div>`;
+      }
+    }
+  }
+  return `<section class="card"><h2>${ICON.cal}Kalender</h2>${body}</section>`;
+}
+
+function renderMail(m) {
+  let body = failed(m), count = '';
+  if (!body) {
+    if (!m.messages) body = '<div class="empty">Lade …</div>';
+    else {
+      count = `<span class="count">${m.unread ? `<b style="color:var(--text)">${nf(m.unread)}</b> ungelesen` : 'Alles gelesen'}</span>`;
+      body = m.messages.length ? m.messages.map((x, i) => `<div class="item${i ? '' : ' first'}">
+        <span class="dot${x.unread ? '' : ' read'}" title="${x.unread ? 'Ungelesen' : 'Gelesen'}"></span>
+        <div class="body"><div class="t">${x.unread ? `<b>${esc(x.from)}</b>` : esc(x.from)}</div><div class="t sub">${esc(x.subject)}</div></div>
+        <span class="when">${ago(x.date)}</span></div>`).join('') : '<div class="empty">Posteingang ist leer</div>';
+    }
+  }
+  return `<section class="card"><h2>${ICON.mail}E-Mails${count}</h2>${body}</section>`;
+}
+
+function renderNews(n) {
+  let body = failed(n);
+  if (!body) {
+    if (!n.items) body = '<div class="empty">Lade …</div>';
+    else body = n.items.slice(0, 7).map((x, i) => `<div class="item news${i ? '' : ' first'}"><div class="body">
+      <div class="t">${x.link ? `<a href="${esc(x.link)}" target="_blank" rel="noopener noreferrer">${esc(x.title)}</a>` : esc(x.title)}</div>
+      <div class="hint">${esc(x.source)} · ${ago(x.date)}</div></div></div>`).join('') || '<div class="empty">Keine Meldungen</div>';
+  }
+  return `<section class="card"><h2>${ICON.news}Nachrichten</h2>${body}</section>`;
+}
+
+function renderPersonal(p) {
+  $('weather').innerHTML = renderWeather(p.weather);
+  const html = (p.calendar ? renderCalendar(p.calendar) : '') + (p.mail ? renderMail(p.mail) : '') + (p.news ? renderNews(p.news) : '');
+  $('personal').innerHTML = html;
+  $('personal').style.display = html ? '' : 'none';
+}
+
+function render(s) {
+  last = s;
+  renderPersonal(s.personal || {});
+  const sys = s.system && !s.system.unavailable ? s.system : null;
+  if (sys) {
+    $('host').textContent = sys.hostname || 'TrueNAS';
+    document.title = (sys.hostname || 'TrueNAS') + ' – Dashboard';
+    const up = sys.uptime + (Date.now() - sys.fetched) / 1000;
+    $('meta').textContent = [sys.version && 'TrueNAS ' + sys.version, sys.model, 'läuft seit ' + uptime(up)].filter(Boolean).join(' · ');
+  }
+  $('conn').innerHTML = s.connected ? chip('good', '✓', 'Verbunden') : chip('critical', '✕', 'Keine Verbindung');
+  $('banner').innerHTML = s.connected ? '' : `<div class="banner"><b>Keine Verbindung zu TrueNAS.</b> ${esc(s.error || '')}</div>`;
+  renderLive(s);
+  $('pools').innerHTML = renderPools(s.pools);
+  $('alerts').innerHTML = renderAlerts(s.alerts);
+  $('disks').innerHTML = renderDisks(s.disks);
+  $('apps').innerHTML = renderWorkloads(s, s.apps, 'app', 'Keine Apps installiert');
+  $('vms').innerHTML = renderWorkloads(s, s.vms, 'vm', 'Keine virtuellen Maschinen');
+  $('tasks').innerHTML = renderTasks(s.tasks);
+}
+
+async function refresh() {
+  try {
+    const r = await fetch('api/state');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    render(await r.json());
+  } catch (e) {
+    $('conn').innerHTML = chip('critical', '✕', 'Dashboard-Server nicht erreichbar');
+  }
+}
+
+for (const id of ['cpuChart', 'memChart', 'netChart']) {
+  const el = $(id);
+  el.addEventListener('pointermove', (e) => { hover[id] = e.clientX - el.getBoundingClientRect().left; if (last) renderLive(last); });
+  el.addEventListener('pointerleave', () => { delete hover[id]; if (last) renderLive(last); });
+}
+window.addEventListener('resize', () => last && renderLive(last));
+
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('button[data-action]');
+  if (!b) return;
+  const { kind, id, action } = b.dataset;
+  const name = b.closest('tr').querySelector('b').textContent;
+  if (action === 'stop' && !confirm(`„${name}" wirklich stoppen?`)) return;
+  b.disabled = true;
+  try {
+    const r = await fetch('api/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind, id, action }) });
+    const j = await r.json();
+    if (!r.ok) alert('Fehler: ' + j.error);
+  } catch (err) { alert('Fehler: ' + err.message); }
+  setTimeout(refresh, 2500);
+});
+
+tickClock();
+setInterval(tickClock, 1000);
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>
