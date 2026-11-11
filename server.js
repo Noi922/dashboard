@@ -15,6 +15,7 @@ const cfg = {
   host: process.env.TRUENAS_HOST || '',
   url: process.env.TRUENAS_URL || '', // optional: komplette WebSocket-URL
   apiKey: process.env.TRUENAS_API_KEY || '',
+  scheme: process.env.TRUENAS_WS_SCHEME === 'ws' ? 'ws' : 'wss', // 'ws' nur für die Demo
   verifyTls: /^(1|true|yes)$/i.test(process.env.TRUENAS_VERIFY_TLS || ''),
   mode: (process.env.TRUENAS_API_MODE || 'auto').toLowerCase(), // auto | ws | rest
   port: Number(process.env.PORT || 8080),
@@ -58,15 +59,23 @@ class RpcClient {
     this.pending = new Map();
     this.onEvent = () => {};
     this.onClose = () => {};
+    this.legacy = false; // true: älteres Protokoll unter /websocket (vor 25.04)
   }
 
-  connect() {
-    const url = cfg.url || `wss://${cfg.host}/api/current`;
+  connect(legacy = false) {
+    this.legacy = legacy;
+    const url = cfg.url || `${cfg.scheme}://${cfg.host}${legacy ? '/websocket' : '/api/current'}`;
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(url, { rejectUnauthorized: cfg.verifyTls, handshakeTimeout: 10000 });
       this.ws = ws;
       let opened = false;
-      ws.on('open', () => { opened = true; resolve(); });
+      ws.on('open', () => {
+        opened = true;
+        if (!legacy) return resolve();
+        this.onHello = resolve;
+        ws.send(JSON.stringify({ msg: 'connect', version: '1', support: ['1'] }));
+        setTimeout(() => reject(new Error('Keine Antwort auf Verbindungsaufbau')), 10000);
+      });
       ws.on('unexpected-response', (_req, res) => {
         const e = new Error(`HTTP ${res.statusCode} beim WebSocket-Aufbau`);
         e.httpStatus = res.statusCode;
@@ -82,6 +91,8 @@ class RpcClient {
       ws.on('message', (raw) => {
         let msg;
         try { msg = JSON.parse(raw); } catch { return; }
+        if (this.legacy) msg = this.fromLegacy(msg);
+        if (!msg) return;
         if (msg.id != null && this.pending.has(msg.id)) {
           const p = this.pending.get(msg.id);
           this.pending.delete(msg.id);
@@ -97,7 +108,27 @@ class RpcClient {
     });
   }
 
+  // Übersetzt Nachrichten des älteren Protokolls in die JSON-RPC-Form
+  fromLegacy(m) {
+    if (m.msg === 'connected') { this.onHello?.(); return null; }
+    if (m.msg === 'ping') { this.ws.send(JSON.stringify({ msg: 'pong', id: m.id })); return null; }
+    if (m.msg === 'result') return { id: Number(m.id), result: m.result, error: m.error && { message: m.error.reason || m.error.error || 'RPC-Fehler' } };
+    if (m.msg === 'ready') return { id: Number(m.subs?.[0]), result: true };
+    if (m.msg === 'nosub') return { id: Number(m.id), error: { message: m.error?.reason || m.error?.error || 'Abo abgelehnt' } };
+    if ((m.msg === 'added' || m.msg === 'changed') && m.collection) return { method: 'collection_update', params: m };
+    return null;
+  }
+
+  subscribe(name) {
+    return this.legacy ? this.send((id) => ({ id: String(id), msg: 'sub', name })) : this.call('core.subscribe', [name]);
+  }
+
   call(method, params = []) {
+    return this.send((id) => (this.legacy ? { id: String(id), msg: 'method', method, params } : { jsonrpc: '2.0', id, method, params }), method);
+  }
+
+  send(build, label = 'Anfrage') {
+    const method = label;
     return new Promise((resolve, reject) => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return reject(new Error('Nicht verbunden'));
       const id = ++this.id;
@@ -106,7 +137,7 @@ class RpcClient {
         reject(new Error(`Zeitüberschreitung bei ${method}`));
       }, 30000);
       this.pending.set(id, { resolve, reject, timer });
-      this.ws.send(JSON.stringify({ jsonrpc: '2.0', id, method, params }));
+      this.ws.send(JSON.stringify(build(id)));
     });
   }
 
@@ -274,6 +305,11 @@ async function pollTasks() {
 function onRealtime(ev) {
   if (ev.collection !== 'reporting.realtime' || !ev.fields) return;
   const f = ev.fields;
+  if (!onRealtime.logged) { // einmalig: Aufbau der Live-Daten fürs Fehlersuchen (enthält keine Zugangsdaten)
+    onRealtime.logged = true;
+    const keys = (o) => (o && typeof o === 'object' ? Object.keys(o).slice(0, 8).join(',') : typeof o);
+    log('Live-Daten empfangen:', Object.keys(f).map((k) => `${k}[${keys(f[k])}]`).join(' '));
+  }
   const cpuAll = f.cpu?.cpu || f.cpu?.average || {};
   let temp = cpuAll.temp ?? null;
   if (temp == null && f.cpu?.temperature_celsius) {
@@ -338,9 +374,9 @@ function startPolling() {
   schedule(pollTasks, 60000);
 }
 
-async function connectWs() {
+async function connectWs(legacy = false) {
   rpc = new RpcClient();
-  await rpc.connect();
+  await rpc.connect(legacy);
   const ok = await rpc.call('auth.login_with_api_key', [cfg.apiKey]);
   if (!ok) throw new Error('Anmeldung abgelehnt – API-Key prüfen');
   rpc.onEvent = onRealtime;
@@ -352,7 +388,7 @@ async function connectWs() {
     setTimeout(start, 5000);
   };
   state.mode = 'ws';
-  try { await rpc.call('core.subscribe', ['reporting.realtime']); } catch (e) {
+  try { await rpc.subscribe('reporting.realtime'); } catch (e) {
     log('Live-Daten nicht verfügbar:', e.message);
   }
 }
@@ -367,17 +403,23 @@ async function start() {
         await connectWs();
       } catch (e) {
         rpc?.close();
-        // Ältere Versionen kennen /api/current nicht -> REST verwenden
+        // Ältere Versionen kennen /api/current nicht -> älteres WebSocket-Protokoll, sonst REST
         if (cfg.mode === 'auto' && !cfg.url && e.httpStatus && e.httpStatus !== 401 && e.httpStatus !== 403) {
-          log('WebSocket-API nicht vorhanden (' + e.message + '), verwende REST-API');
-          state.mode = 'rest';
-          await restCall('system.info');
+          log('Neue WebSocket-API nicht vorhanden (' + e.message + '), versuche ältere WebSocket-API');
+          try {
+            await connectWs(true);
+          } catch (e2) {
+            rpc?.close();
+            log('Ältere WebSocket-API nicht nutzbar (' + e2.message + '), verwende REST-API');
+            state.mode = 'rest';
+            await restCall('system.info');
+          }
         } else throw e;
       }
     }
     state.connected = true;
     state.error = null;
-    log(`Verbunden mit TrueNAS (${state.mode === 'ws' ? 'WebSocket-API' : 'REST-API'})`);
+    log(`Verbunden mit TrueNAS (${state.mode === 'ws' ? (rpc.legacy ? 'ältere WebSocket-API' : 'WebSocket-API') : 'REST-API'})`);
     startPolling();
   } catch (e) {
     state.connected = false;

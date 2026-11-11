@@ -124,18 +124,44 @@ const httpServer = require('http').createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
   res.end(f());
 }).listen(port);
-const wss = new WebSocketServer({ server: httpServer, path: '/api/current' });
+const legacy = process.env.MOCK_LEGACY === '1';
+const wss = new WebSocketServer({ noServer: true });
+httpServer.on('upgrade', (req, socket, head) => {
+  if (req.url !== (legacy ? '/websocket' : '/api/current')) {
+    socket.end('HTTP/1.1 302 Found\r\nLocation: /ui/\r\nContent-Length: 0\r\n\r\n');
+    return;
+  }
+  wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws));
+});
 wss.on('connection', (ws) => {
   const timer = setInterval(() => {
-    ws.send(JSON.stringify({ jsonrpc: '2.0', method: 'collection_update',
-      params: { msg: 'added', collection: 'reporting.realtime', fields: realtime() } }));
+    const ev = { msg: 'added', collection: 'reporting.realtime', fields: legacy ? realtimeLegacy() : realtime() };
+    ws.send(JSON.stringify(legacy ? ev : { jsonrpc: '2.0', method: 'collection_update', params: ev }));
   }, Number(process.env.MOCK_INTERVAL || 2000));
   ws.on('close', () => clearInterval(timer));
   ws.on('message', (raw) => {
-    const { id, method, params } = JSON.parse(raw);
+    const m = JSON.parse(raw);
+    if (legacy) {
+      if (m.msg === 'connect') return ws.send(JSON.stringify({ msg: 'connected', session: 'demo' }));
+      if (m.msg === 'sub') return ws.send(JSON.stringify({ msg: 'ready', subs: [m.id] }));
+      const fn = methods[m.method];
+      if (!fn) return ws.send(JSON.stringify({ msg: 'result', id: m.id, error: { error: 2, reason: 'Method does not exist' } }));
+      return ws.send(JSON.stringify({ msg: 'result', id: m.id, result: fn(m.params || []) }));
+    }
+    const { id, method, params } = m;
     const fn = methods[method];
     if (!fn) return ws.send(JSON.stringify({ jsonrpc: '2.0', id, error: { code: -32601, message: 'Method not found' } }));
     ws.send(JSON.stringify({ jsonrpc: '2.0', id, result: fn(params || []) }));
   });
 });
-console.log(`Simuliertes TrueNAS auf ws://localhost:${port}/api/current`);
+// Feldnamen, wie sie ältere Versionen liefern
+function realtimeLegacy() {
+  const r = realtime();
+  return {
+    cpu: { average: { usage: r.cpu.cpu.usage }, temperature_celsius: { 0: r.cpu.cpu.temp, 1: r.cpu.cpu.temp - 2 } },
+    virtual_memory: { total: r.memory.physical_memory_total, available: r.memory.physical_memory_available },
+    zfs: { arc_size: r.memory.arc_size },
+    interfaces: r.interfaces,
+  };
+}
+console.log(`Simuliertes TrueNAS auf ws://localhost:${port}${legacy ? '/websocket (älteres Protokoll)' : '/api/current'}`);

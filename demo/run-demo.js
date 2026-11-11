@@ -1,7 +1,8 @@
 'use strict';
 // Startet das Dashboard mit simulierten Daten: npm run demo
 process.env.MOCK_PORT ||= '9999';
-process.env.TRUENAS_URL = `ws://localhost:${process.env.MOCK_PORT}/api/current`;
+process.env.TRUENAS_HOST = `localhost:${process.env.MOCK_PORT}`;
+process.env.TRUENAS_WS_SCHEME = 'ws';
 process.env.TRUENAS_API_KEY = 'demo';
 process.env.ENABLE_ACTIONS ||= 'true';
 const base = `http://localhost:${process.env.MOCK_PORT}`;

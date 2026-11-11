@@ -75,9 +75,10 @@ Variablen aus `.env` eintragen.
 
 ## Hinweise
 
-- **TrueNAS-Version:** ab 25.04 wird die WebSocket-API verwendet (mit Live-Diagrammen).
-  Bei älteren Versionen weicht das Dashboard automatisch auf die REST-API aus;
-  Live-Diagramme und Start/Stopp gibt es dort nicht.
+- **TrueNAS-Version:** ab 25.04 wird die neue WebSocket-API verwendet. Ältere
+  Versionen werden automatisch über die ältere WebSocket-API angebunden, ebenfalls
+  mit Live-Diagrammen. Nur wenn beides nicht geht, weicht das Dashboard auf die
+  REST-API aus (ohne Live-Diagramme und ohne Start/Stopp).
 - **API-Key und HTTPS:** Die Verbindung zu TrueNAS läuft immer verschlüsselt.
   TrueNAS sperrt API-Keys, die unverschlüsselt übertragen wurden.
 - **Sicherheit:** Der API-Key und das E-Mail-Passwort bleiben im Container und
